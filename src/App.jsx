@@ -228,8 +228,173 @@ function parseItinerary(json) {
   }
 }
 
+
+// ── PDF Generator ─────────────────────────────────────────────────
+async function generatePDF(data) {
+  // Dynamically load jsPDF from CDN
+  if (!window.jspdf) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const W = 210, MX = 18, CW = W - MX * 2;
+  let y = 0;
+
+  const colors = {
+    purple: [60, 52, 137], purpleL: [238, 237, 254],
+    green: [39, 80, 10],   greenL: [234, 243, 222],
+    coral: [113, 43, 19],  coralL: [250, 236, 231],
+    blue: [12, 68, 124],   blueL: [230, 241, 251],
+    gray: [68, 68, 65],    grayL: [241, 239, 232],
+    amber: [99, 56, 6],    amberL: [250, 238, 218],
+    border: [211, 209, 199],
+    white: [255, 255, 255],
+    textMain: [26, 26, 24], textSec: [95, 94, 90], textMuted: [136, 135, 128],
+  };
+
+  const setFill = (rgb) => doc.setFillColor(...rgb);
+  const setColor = (rgb) => doc.setTextColor(...rgb);
+  const setDraw = (rgb) => doc.setDrawColor(...rgb);
+
+  function rr(x, y, w, h, r, fill, stroke) {
+    setFill(fill);
+    if (stroke) { setDraw(stroke); doc.setLineWidth(0.3); }
+    doc.roundedRect(x, y, w, h, r, r, stroke ? "FD" : "F");
+  }
+
+  function text(str, x, y, opts = {}) {
+    if (opts.bold) doc.setFont("helvetica", "bold");
+    else doc.setFont("helvetica", "normal");
+    doc.setFontSize(opts.size || 9);
+    setColor(opts.color || colors.textMain);
+    doc.text(String(str || ""), x, y, { maxWidth: opts.maxWidth });
+  }
+
+  function checkPage(needed) {
+    if (y + needed > 270) { doc.addPage(); y = 15; }
+  }
+
+  // HEADER
+  setFill(colors.purple);
+  doc.rect(0, 0, W, 28, "F");
+  text(data.titulo, MX, 11, { bold: true, size: 14, color: colors.white });
+  text(data.subtitulo || "", MX, 18, { size: 8, color: [175, 169, 236] });
+  text("Horários sujeitos a confirmação", MX, 24, { size: 7, color: [127, 119, 221] });
+  y = 34;
+
+  const dayColors = {
+    "Dom": { bg: colors.grayL, fg: colors.gray },
+    "Seg": { bg: [192, 221, 151], fg: colors.green },
+    "Ter": { bg: colors.blueL, fg: colors.blue },
+    "Qua": { bg: colors.coralL, fg: colors.coral },
+    "Qui": { bg: colors.purpleL, fg: colors.purple },
+    "Sex": { bg: [243, 230, 251], fg: [90, 21, 128] },
+  };
+
+  for (const dia of (data.dias || [])) {
+    // estimate block height
+    const flightCount = dia.voos?.length || 0;
+    const hasReuniao = !!dia.reuniao;
+    const noteCount = dia.notas?.length || 0;
+    const blockH = 14 + (hasReuniao ? 8 : 0) + flightCount * 10 + noteCount * 5 + 6;
+    checkPage(blockH + 6);
+
+    // card background
+    rr(MX, y, CW, blockH, 3, colors.grayL, colors.border);
+
+    // day badge
+    const dayKey = (dia.badge || "").split(",")[0]?.trim();
+    const dc = dayColors[dayKey] || { bg: colors.grayL, fg: colors.gray };
+    rr(MX + 3, y + 3, 38, 6, 2, dc.bg);
+    text(dia.badge || "", MX + 5, y + 7.5, { size: 7, bold: true, color: dc.fg });
+
+    // title
+    text(dia.titulo || "", MX + 44, y + 7.5, { size: 9, bold: true, color: colors.textMain });
+    text(dia.subtitulo || "", MX + 3, y + 13, { size: 7.5, color: colors.textSec });
+
+    let cy = y + 17;
+
+    // meeting row
+    if (hasReuniao) {
+      rr(MX + 3, cy, CW - 6, 7, 2, colors.greenL, [151, 196, 89]);
+      text("🤝 " + dia.reuniao, MX + 5, cy + 5, { size: 7.5, bold: true, color: colors.green });
+      cy += 9;
+    }
+
+    if (hasReuniao && flightCount > 0) {
+      setDraw(colors.border);
+      doc.setLineWidth(0.2);
+      doc.line(MX + 3, cy, MX + CW - 3, cy);
+      cy += 3;
+    }
+
+    // flights
+    for (const v of (dia.voos || [])) {
+      const flBg = v.night ? colors.purpleL : colors.grayL;
+      const flBorder = v.night ? colors.purple : colors.border;
+      rr(MX + 3, cy, CW - 6, 8, 2, flBg, flBorder);
+      // airline badge
+      rr(MX + 5, cy + 1.5, 14, 5, 1, colors.coralL);
+      text(v.airline || "", MX + 6, cy + 5.5, { size: 6, bold: true, color: colors.coral });
+      text(v.route || "", MX + 22, cy + 5.5, { size: 8, bold: true, color: colors.textMain });
+      text(v.time || "", MX + 95, cy + 5.5, { size: 7.5, color: colors.textSec });
+      text(v.duration || "", MX + 135, cy + 5.5, { size: 7, color: colors.textMuted });
+      cy += 10;
+    }
+
+    // notes
+    for (const n of (dia.notas || [])) {
+      text(n, MX + 5, cy + 4, { size: 7, color: colors.textMuted, maxWidth: CW - 10 });
+      cy += 5;
+    }
+
+    y += blockH + 5;
+  }
+
+  // Summary
+  checkPage(30);
+  rr(MX, y, CW, 4, 0, colors.purple);
+  text("Resumo do roteiro", MX + 3, y + 3, { size: 8, bold: true, color: colors.white });
+  y += 7;
+  const dotColors = ["#F0997B","#C0DD97","#AFA9EC","#85B7EB","#CECBF6","#D3D1C7"];
+  (data.resumo || []).forEach((item, i) => {
+    checkPage(7);
+    const col = i % 2, row = Math.floor(i / 2);
+    const sx = MX + col * (CW / 2);
+    const sy = y + row * 6;
+    doc.setFillColor(dotColors[i % 6]);
+    doc.circle(sx + 3, sy + 1.5, 1.5, "F");
+    text(item, sx + 7, sy + 3, { size: 7.5, color: colors.textSec, maxWidth: CW / 2 - 10 });
+  });
+  y += Math.ceil((data.resumo?.length || 0) / 2) * 6 + 5;
+
+  // Footer
+  checkPage(10);
+  setDraw(colors.border);
+  doc.setLineWidth(0.3);
+  doc.line(MX, y + 3, W - MX, y + 3);
+  text("Gerador de Roteiro de Viagem · Gerado por Claude · Anthropic", MX, y + 8, { size: 7, color: colors.textMuted });
+
+  const filename = (data.titulo || "roteiro").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".pdf";
+  doc.save(filename);
+}
+
 // ── Rendered Itinerary ───────────────────────────────────────────
 function ItineraryView({ data, onReset }) {
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  async function handleDownloadPDF() {
+    setPdfLoading(true);
+    try { await generatePDF(data); } catch(e) { alert("Erro ao gerar PDF: " + e.message); }
+    finally { setPdfLoading(false); }
+  }
+
   const badgeMap = {
     "Dom": [C.grayLight, C.gray],
     "Seg": ["#C0DD97", C.green],
@@ -299,6 +464,19 @@ function ItineraryView({ data, onReset }) {
       <p style={{ fontSize: 10, color: C.textMuted, textAlign: "center", marginTop: 8 }}>
         Horários sujeitos a confirmação · Verifique disponibilidade em latam.com antes de comprar
       </p>
+
+      <button
+        onClick={handleDownloadPDF}
+        disabled={pdfLoading}
+        style={{
+          width: "100%", padding: "12px", borderRadius: 8, marginTop: 8,
+          background: pdfLoading ? C.grayMid : C.purpleDark,
+          border: "none", color: C.white,
+          fontSize: 13, fontWeight: 700, cursor: pdfLoading ? "not-allowed" : "pointer",
+        }}
+      >
+        {pdfLoading ? "Gerando PDF..." : "⬇ Baixar PDF"}
+      </button>
 
       <button onClick={onReset} style={{
         width: "100%", padding: "10px", borderRadius: 8, marginTop: 8,
