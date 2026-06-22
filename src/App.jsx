@@ -1,11 +1,12 @@
 import { useState } from "react";
+import logoSvg from "./logo.svg";
 
 // ── Palette ──────────────────────────────────────────────────────
 const C = {
-  purpleDark:  "#3C3489",
-  purpleMid:   "#7F77DD",
-  purpleLight: "#EEEDFE",
-  purpleBg:    "#F5F4FF",
+  purpleDark:  "#5D00D7",
+  purpleMid:   "#9B4EFF",
+  purpleLight: "#F0E6FF",
+  purpleBg:    "#F8F2FF",
   green:       "#27500A",
   greenLight:  "#EAF3DE",
   greenMid:    "#97C459",
@@ -471,7 +472,7 @@ function ItineraryView({ data, onReset }) {
         style={{
           width: "100%", padding: "12px", borderRadius: 8, marginTop: 8,
           background: pdfLoading ? C.grayMid : C.purpleDark,
-          border: "none", color: C.white,
+          border: "none", color: C.white, borderRadius: 100,
           fontSize: 13, fontWeight: 700, cursor: pdfLoading ? "not-allowed" : "pointer",
         }}
       >
@@ -481,7 +482,7 @@ function ItineraryView({ data, onReset }) {
       <button onClick={onReset} style={{
         width: "100%", padding: "10px", borderRadius: 8, marginTop: 8,
         background: C.grayLight, border: `0.5px solid ${C.border}`,
-        color: C.textSec, fontSize: 13, cursor: "pointer", fontWeight: 500,
+        color: C.textSec, fontSize: 13, cursor: "pointer", fontWeight: 500, borderRadius: 100,
       }}>← Novo roteiro</button>
     </div>
   );
@@ -608,11 +609,7 @@ export default function App() {
       {/* Logo / Title */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 8,
-            background: C.purpleDark, display: "flex", alignItems: "center",
-            justifyContent: "center", fontSize: 16,
-          }}>✈</div>
+          <img src={logoSvg} alt="logo" style={{ width: 32, height: 32 }} />
           <h1 style={{ fontSize: 18, fontWeight: 700, color: C.purpleDark, margin: 0 }}>
             Gerador de Roteiro
           </h1>
@@ -727,7 +724,7 @@ export default function App() {
                   onClick={() => setAirline(a)}
                   style={{
                     flex: 1, padding: "8px 4px", borderRadius: 7, fontSize: 12, fontWeight: 500,
-                    cursor: "pointer", transition: "all 0.15s",
+                    cursor: "pointer", transition: "all 0.15s", borderRadius: 100,
                     background: airline === a ? C.purpleDark : C.grayLight,
                     color: airline === a ? C.white : C.textSec,
                     border: `0.5px solid ${airline === a ? C.purpleDark : C.border}`,
@@ -766,7 +763,7 @@ export default function App() {
             onClick={generate}
             disabled={!origin || destinations.length === 0 || !startDate || !returnDate || returnDate < startDate}
             style={{
-              width: "100%", padding: "13px", borderRadius: 9,
+              width: "100%", padding: "13px", borderRadius: 100,
               background: (!origin || destinations.length === 0 || !returnDate || returnDate < startDate) ? C.grayMid : C.purpleDark,
               color: C.white, fontSize: 14, fontWeight: 700,
               border: "none", cursor: (!origin || destinations.length === 0) ? "not-allowed" : "pointer",
