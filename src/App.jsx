@@ -583,8 +583,8 @@ export default function App() {
         return;
       }
 
-      // Use _text shortcut from function, or fallback to content blocks
-      const text = data._text || data.content?.filter(b => b.type === "text").map(b => b.text).join("") || "";
+      // Extract text from content blocks
+      const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("") || "";
 
       if (!text) {
         setError(`Resposta vazia da API. Stop reason: ${data.stop_reason || "desconhecido"}`);

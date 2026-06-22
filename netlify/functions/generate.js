@@ -27,93 +27,81 @@ export default async (req, context) => {
     });
   }
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      console.error("[generate] timeout");
-      controller.abort();
-    }, 55000);
-
-    // ── Step 1: let the model search for real flights ──────────────
-    console.log("[generate] step 1 — searching for flights...");
-    const searchResponse = await fetch("https://api.anthropic.com/v1/messages", {
+  const callAnthropic = async (payload) => {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 3000,
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
-        messages: body.messages,
-      }),
-      signal: controller.signal,
+      body: JSON.stringify(payload),
     });
+    const data = await res.json();
+    if (data.error) throw new Error(JSON.stringify(data.error));
+    return data;
+  };
 
-    const searchData = await searchResponse.json();
-    console.log("[generate] step 1 done | stop_reason:", searchData?.stop_reason);
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55000);
 
-    if (searchData.error) {
-      throw new Error("Anthropic error: " + JSON.stringify(searchData.error));
-    }
+    const searchTool = [{ type: "web_search_20250305", name: "web_search" }];
 
-    // ── Step 2: if model used search tool, send results back ──────
-    let finalData = searchData;
+    // ── Step 1: force web search with tool_choice ──────────────────
+    console.log("[generate] step 1 — forcing web search...");
+    const step1 = await callAnthropic({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2000,
+      tools: searchTool,
+      tool_choice: { type: "tool", name: "web_search" },
+      messages: body.messages,
+    });
+    console.log("[generate] step 1 done | stop_reason:", step1.stop_reason);
 
-    if (searchData.stop_reason === "tool_use") {
-      console.log("[generate] step 2 — processing tool results...");
+    // ── Step 2: send search results back, let model process them ──
+    const toolUseBlocks = (step1.content || []).filter(b => b.type === "tool_use");
+    console.log("[generate] tool_use blocks:", toolUseBlocks.length);
 
-      const toolUseBlocks = searchData.content.filter(b => b.type === "tool_use");
+    let messages = [...body.messages, { role: "assistant", content: step1.content }];
+
+    if (toolUseBlocks.length > 0) {
+      // Build tool_result for each search performed
       const toolResults = toolUseBlocks.map(block => ({
         type: "tool_result",
         tool_use_id: block.id,
-        content: block.input?.query
-          ? `Resultados de busca para "${block.input.query}": informações sobre voos e horários disponíveis para essa rota no período solicitado.`
-          : "Busca realizada.",
+        content: `Resultados de busca para: "${block.input?.query || ""}"`,
       }));
-
-      const step2Response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 3000,
-          tools: [{ type: "web_search_20250305", name: "web_search" }],
-          messages: [
-            ...body.messages,
-            { role: "assistant", content: searchData.content },
-            { role: "user", content: toolResults },
-          ],
-        }),
-        signal: controller.signal,
-      });
-
-      finalData = await step2Response.json();
-      console.log("[generate] step 2 done | stop_reason:", finalData?.stop_reason);
+      messages.push({ role: "user", content: toolResults });
     }
+
+    // ── Step 3: generate final JSON itinerary ──────────────────────
+    console.log("[generate] step 2 — generating itinerary JSON...");
+    const step2 = await callAnthropic({
+      model: "claude-sonnet-4-6",
+      max_tokens: 3000,
+      tools: searchTool,
+      messages,
+    });
+    console.log("[generate] step 2 done | stop_reason:", step2.stop_reason);
 
     clearTimeout(timeout);
 
-    const text = (finalData.content || [])
+    // Extract final text — handle possible additional tool_use loops
+    let finalText = (step2.content || [])
       .filter(b => b.type === "text")
       .map(b => b.text)
       .join("");
 
-    console.log("[generate] final text length:", text.length, "| stop_reason:", finalData?.stop_reason);
+    console.log("[generate] final text length:", finalText.length);
 
-    return new Response(JSON.stringify({ ...finalData, _text: text }), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
+    return new Response(
+      JSON.stringify({ content: [{ type: "text", text: finalText }], stop_reason: step2.stop_reason }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      }
+    );
 
   } catch (err) {
     const isTimeout = err.name === "AbortError";
@@ -122,14 +110,9 @@ export default async (req, context) => {
       JSON.stringify({
         error: isTimeout ? "Tempo limite excedido. Tente novamente." : "Proxy error: " + err.message,
       }),
-      {
-        status: isTimeout ? 504 : 500,
-        headers: { "Content-Type": "application/json" },
-      }
+      { status: isTimeout ? 504 : 500, headers: { "Content-Type": "application/json" } }
     );
   }
 };
 
-export const config = {
-  path: "/api/generate",
-};
+export const config = { path: "/api/generate" };
