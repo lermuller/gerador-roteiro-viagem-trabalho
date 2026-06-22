@@ -189,63 +189,39 @@ function SectionHeader({ dateBadge, badgeBg, badgeColor, title, subtitle }) {
 
 // ── Itinerary logic ──────────────────────────────────────────────
 function buildPrompt({ origin, destinations, startDate, returnDate, airline, meetingHours, departureNote }) {
-  return `Você é um especialista em roteiros de viagem corporativa no Brasil.
+  return `Responda SOMENTE com JSON puro sem markdown, sem blocos de codigo, sem texto antes ou depois. Apenas o objeto JSON.
 
-Gere um roteiro de viagem detalhado com as seguintes informações:
-- Cidade de origem: ${origin.label} (${origin.code})
-- Destinos para reuniões: ${destinations.map(d => `${d.label} (${d.code})`).join(", ")}
-- Data de início: ${startDate}
-- Data de retorno à origem: ${returnDate} — o último dia do roteiro deve ser o voo de volta para ${origin.label} (${origin.code})
-- Companhia aérea preferida: ${airline}
-- Horário das reuniões: ${meetingHours}
-- Preferência de voos: noturnos entre destinos quando possível
-- ${departureNote ? `Nota adicional: ${departureNote}` : ""}
+DADOS DA VIAGEM:
+- Origem: ${origin.label} (${origin.code})
+- Destinos: ${destinations.map(d => d.label + " (" + d.code + ")").join(", ")}
+- Data inicio: ${startDate} | Data retorno: ${returnDate}
+- Companhia preferida: ${airline} | Horario reunioes: ${meetingHours}
+- Observacoes: ${departureNote || "Preferir voos noturnos entre destinos"}
 
-Regras:
-1. Otimize a rota geográfica (sem backtracking)
-2. Use voos noturnos entre destinos para não perder dias úteis
-3. Priorize a companhia aérea indicada
-4. Cada reunião deve ser em um dia útil (seg–sex)
-5. Sugira voos reais operados por companhias brasileiras (LATAM, GOL, Azul)
-6. Para retorno, considere conexões em GRU se necessário
-7. O voo de retorno deve obrigatoriamente ocorrer na data de retorno informada
+REGRAS:
+1. Otimize rota geografica sem backtracking
+2. Use voos noturnos entre destinos para nao perder dias uteis
+3. Priorize a companhia indicada
+4. Reunioes apenas em dias uteis seg-sex
+5. Use voos reais de LATAM GOL ou Azul
+6. Retorno obrigatoriamente em ${returnDate}
+7. Mantenha notas com no maximo 1 item por dia e resumo com no maximo 4 itens
 
-Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. Estrutura:
-{
-  "titulo": "string",
-  "subtitulo": "string",
-  "dias": [
-    {
-      "data": "YYYY-MM-DD",
-      "tipo": "voo_posicionamento" | "reuniao_e_voo" | "reuniao" | "retorno",
-      "cidade": "string",
-      "badge": "string (ex: Dom, 16 ago · noite)",
-      "badgeBg": "hex color",
-      "badgeColor": "hex color",
-      "titulo": "string",
-      "subtitulo": "string",
-      "reuniao": "string ou null (ex: Reunião em Curitiba · 09h00 – 17h00)",
-      "voos": [
-        {
-          "airline": "string",
-          "route": "string (ex: POA → CWB)",
-          "time": "string (ex: 21h00 → 22h15)",
-          "duration": "string (ex: 1h15 · direto)",
-          "fnum": "string ou null",
-          "night": true | false,
-          "aviso": "string ou null"
-        }
-      ],
-      "notas": ["string"]
-    }
-  ],
-  "resumo": ["string"]
-}`;
+RESPONDA APENAS COM ESTE JSON (sem nenhum texto adicional):
+{"titulo":"string","subtitulo":"string","dias":[{"data":"YYYY-MM-DD","tipo":"voo_posicionamento ou reuniao_e_voo ou reuniao ou retorno","cidade":"string","badge":"string ex Dom 16 ago","badgeBg":"#hexcolor","badgeColor":"#hexcolor","titulo":"string","subtitulo":"string","reuniao":"string ou null","voos":[{"airline":"string","route":"string ex POA para CWB","time":"string ex 21h00 ate 22h15","duration":"string ex 1h15 direto","fnum":"string ou null","night":true,"aviso":"string ou null"}],"notas":["string"]}],"resumo":["string"]}`;
 }
 
 function parseItinerary(json) {
   try {
-    const clean = json.replace(/```json|```/g, "").trim();
+    // Strip any markdown code fences and surrounding whitespace
+    let clean = json.trim();
+    clean = clean.replace(/^```json\s*/i, "").replace(/^```\s*/i, "");
+    clean = clean.replace(/\s*```$/i, "").trim();
+    // Find the outermost JSON object in case there's stray text
+    const start = clean.indexOf("{");
+    const end = clean.lastIndexOf("}");
+    if (start === -1 || end === -1) return null;
+    clean = clean.slice(start, end + 1);
     return JSON.parse(clean);
   } catch {
     return null;
