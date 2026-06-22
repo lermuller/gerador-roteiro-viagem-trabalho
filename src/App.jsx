@@ -556,38 +556,68 @@ export default function App() {
     setDestinations(destinations.filter(d => d.code !== code));
   }
 
+  async function callAnthropic(messages, tools, toolChoice, maxTokens = 2000) {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, tools, toolChoice, maxTokens }),
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`HTTP ${res.status}: ${txt.slice(0, 120)}`);
+    }
+    return res.json();
+  }
+
   async function generate() {
     if (!origin || destinations.length === 0 || !startDate || !returnDate || returnDate < startDate) return;
     setLoading(true);
     setStep("loading");
     setError(null);
 
-    const prompt = buildPrompt({ origin, destinations, startDate, returnDate, airline, meetingHours, departureNote });
-
     try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
+      const prompt = buildPrompt({ origin, destinations, startDate, returnDate, airline, meetingHours, departureNote });
 
-      const data = await res.json();
+      // ── Step 1: try to search real flights (may timeout — that's OK) ──
+      let searchContext = "";
+      try {
+        const searchQuery = `voos disponíveis ${origin.code} para ${destinations.map(d=>d.code).join(", ")} entre ${startDate} e ${returnDate}, companhias ${airline}, LATAM GOL Azul, horários e rotas reais`;
+        const step1 = await callAnthropic(
+          [{ role: "user", content: `Pesquise voos reais para esta viagem corporativa no Brasil: ${searchQuery}. Liste rotas, horários e companhias encontrados.` }],
+          [{ type: "web_search_20250305", name: "web_search" }],
+          { type: "tool", name: "web_search" },
+          1500
+        );
+        if (!step1._timeout && !step1.error) {
+          searchContext = (step1.content || [])
+            .map(b => b.type === "text" ? b.text : "")
+            .filter(Boolean).join("\n").slice(0, 1800);
+        }
+      } catch (searchErr) {
+        // Search failed — continue with model knowledge
+        console.warn("Busca de voos falhou, usando conhecimento do modelo:", searchErr.message);
+      }
 
-      // Server or API error
-      if (!res.ok || data.error) {
-        const msg = data.error || `HTTP ${res.status}`;
-        setError(`Erro do servidor: ${msg}`);
+      // ── Step 2: generate optimized itinerary JSON (always runs) ──
+      const contextNote = searchContext
+        ? `\n\nVOOS PESQUISADOS (use estes dados reais):\n${searchContext}`
+        : `\n\nUse seu conhecimento sobre rotas e horários típicos de voos domésticos brasileiros para otimizar o deslocamento.`;
+
+      const step2 = await callAnthropic(
+        [{ role: "user", content: prompt + contextNote }],
+        undefined, undefined, 2500
+      );
+
+      if (step2.error) {
+        setError(`Erro do servidor: ${step2.error}`);
         setStep("form");
         return;
       }
 
-      // Extract text from content blocks
-      const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("") || "";
+      const text = (step2.content || []).filter(b => b.type === "text").map(b => b.text).join("");
 
       if (!text) {
-        setError(`Resposta vazia da API. Stop reason: ${data.stop_reason || "desconhecido"}`);
+        setError(`Resposta vazia. Stop reason: ${step2.stop_reason || "desconhecido"}`);
         setStep("form");
         return;
       }
@@ -597,11 +627,11 @@ export default function App() {
         setItinerary(parsed);
         setStep("result");
       } else {
-        setError(`JSON inválido recebido. Início da resposta: ${text.slice(0, 300)}`);
+        setError(`JSON inválido. Início: ${text.slice(0, 300)}`);
         setStep("form");
       }
     } catch (e) {
-      setError(`Erro de conexão: ${e.message}`);
+      setError(`Erro: ${e.message}`);
       setStep("form");
     } finally {
       setLoading(false);
