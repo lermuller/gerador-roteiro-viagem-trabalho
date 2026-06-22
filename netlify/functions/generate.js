@@ -1,5 +1,4 @@
 export default async (req, context) => {
-  // Only allow POST
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
@@ -18,6 +17,9 @@ export default async (req, context) => {
   try {
     const body = await req.json();
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -26,12 +28,14 @@ export default async (req, context) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2000,
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1500,
         messages: body.messages,
       }),
+      signal: controller.signal,
     });
 
+    clearTimeout(timeout);
     const data = await response.json();
 
     return new Response(JSON.stringify(data), {
@@ -42,10 +46,14 @@ export default async (req, context) => {
       },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: "Proxy error: " + err.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    const isTimeout = err.name === "AbortError";
+    return new Response(
+      JSON.stringify({ error: isTimeout ? "Tempo limite excedido. Tente novamente." : "Proxy error: " + err.message }),
+      {
+        status: isTimeout ? 504 : 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 };
 

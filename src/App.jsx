@@ -28,22 +28,76 @@ const C = {
 
 // ── Brazilian airports ────────────────────────────────────────────
 const AIRPORTS = [
-  { code: "GRU", city: "São Paulo", label: "São Paulo (Guarulhos)" },
-  { code: "CGH", city: "São Paulo", label: "São Paulo (Congonhas)" },
-  { code: "GIG", city: "Rio de Janeiro", label: "Rio de Janeiro (Galeão)" },
-  { code: "SDU", city: "Rio de Janeiro", label: "Rio de Janeiro (Santos Dumont)" },
-  { code: "BSB", city: "Brasília", label: "Brasília" },
-  { code: "FOR", city: "Fortaleza", label: "Fortaleza" },
-  { code: "SSA", city: "Salvador", label: "Salvador" },
-  { code: "REC", city: "Recife", label: "Recife" },
-  { code: "BEL", city: "Belém", label: "Belém" },
-  { code: "MAO", city: "Manaus", label: "Manaus" },
-  { code: "CWB", city: "Curitiba", label: "Curitiba" },
-  { code: "FLN", city: "Florianópolis", label: "Florianópolis" },
-  { code: "POA", city: "Porto Alegre", label: "Porto Alegre" },
-  { code: "BHZ", city: "Belo Horizonte", label: "Belo Horizonte (Confins)" },
-  { code: "VCP", city: "Campinas", label: "Campinas (Viracopos)" },
-];
+  // São Paulo
+  { code: "GRU", city: "São Paulo", label: "São Paulo (Guarulhos — GRU)" },
+  { code: "CGH", city: "São Paulo", label: "São Paulo (Congonhas — CGH)" },
+  { code: "VCP", city: "Campinas", label: "Campinas / Viracopos (VCP)" },
+  { code: "SJP", city: "São José do Rio Preto", label: "São José do Rio Preto (SJP)" },
+  { code: "RAO", city: "Ribeirão Preto", label: "Ribeirão Preto (RAO)" },
+  { code: "BAU", city: "Bauru", label: "Bauru (BAU)" },
+  { code: "SOD", city: "Sorocaba", label: "Sorocaba (SOD)" },
+  // Rio de Janeiro
+  { code: "GIG", city: "Rio de Janeiro", label: "Rio de Janeiro (Galeão — GIG)" },
+  { code: "SDU", city: "Rio de Janeiro", label: "Rio de Janeiro (Santos Dumont — SDU)" },
+  // Sudeste
+  { code: "CNF", city: "Belo Horizonte", label: "Belo Horizonte (Confins — CNF)" },
+  { code: "PLU", city: "Belo Horizonte", label: "Belo Horizonte (Pampulha — PLU)" },
+  { code: "VIX", city: "Vitória", label: "Vitória (VIX)" },
+  { code: "UDI", city: "Uberlândia", label: "Uberlândia (UDI)" },
+  { code: "IZA", city: "Juiz de Fora", label: "Juiz de Fora (IZA)" },
+  { code: "MOC", city: "Montes Claros", label: "Montes Claros (MOC)" },
+  { code: "GVR", city: "Governador Valadares", label: "Governador Valadares (GVR)" },
+  // Sul
+  { code: "CWB", city: "Curitiba", label: "Curitiba (CWB)" },
+  { code: "FLN", city: "Florianópolis", label: "Florianópolis (FLN)" },
+  { code: "POA", city: "Porto Alegre", label: "Porto Alegre (POA)" },
+  { code: "JOI", city: "Joinville", label: "Joinville (JOI)" },
+  { code: "CXJ", city: "Caxias do Sul", label: "Caxias do Sul (CXJ)" },
+  { code: "IGU", city: "Foz do Iguaçu", label: "Foz do Iguaçu (IGU)" },
+  { code: "LDB", city: "Londrina", label: "Londrina (LDB)" },
+  { code: "MGF", city: "Maringá", label: "Maringá (MGF)" },
+  { code: "CAC", city: "Cascavel", label: "Cascavel (CAC)" },
+  { code: "XAP", city: "Chapecó", label: "Chapecó (XAP)" },
+  { code: "BNU", city: "Blumenau", label: "Blumenau (BNU)" },
+  { code: "PFB", city: "Passo Fundo", label: "Passo Fundo (PFB)" },
+  { code: "PET", city: "Pelotas", label: "Pelotas (PET)" },
+  { code: "BGX", city: "Bagé", label: "Bagé (BGX)" },
+  { code: "RIA", city: "Santa Maria", label: "Santa Maria (RIA)" },
+  // Centro-Oeste
+  { code: "BSB", city: "Brasília", label: "Brasília (BSB)" },
+  { code: "CGB", city: "Cuiabá", label: "Cuiabá (CGB)" },
+  { code: "CGR", city: "Campo Grande", label: "Campo Grande (CGR)" },
+  { code: "GYN", city: "Goiânia", label: "Goiânia (GYN)" },
+  { code: "PMW", city: "Palmas", label: "Palmas (PMW)" },
+  { code: "ROO", city: "Rondonópolis", label: "Rondonópolis (ROO)" },
+  // Nordeste
+  { code: "FOR", city: "Fortaleza", label: "Fortaleza (FOR)" },
+  { code: "SSA", city: "Salvador", label: "Salvador (SSA)" },
+  { code: "REC", city: "Recife", label: "Recife (REC)" },
+  { code: "NAT", city: "Natal", label: "Natal (NAT)" },
+  { code: "MCZ", city: "Maceió", label: "Maceió (MCZ)" },
+  { code: "AJU", city: "Aracaju", label: "Aracaju (AJU)" },
+  { code: "JPA", city: "João Pessoa", label: "João Pessoa (JPA)" },
+  { code: "SLZ", city: "São Luís", label: "São Luís (SLZ)" },
+  { code: "THE", city: "Teresina", label: "Teresina (THE)" },
+  { code: "JDO", city: "Juazeiro do Norte", label: "Juazeiro do Norte (JDO)" },
+  { code: "CPV", city: "Campina Grande", label: "Campina Grande (CPV)" },
+  { code: "IOS", city: "Ilhéus", label: "Ilhéus (IOS)" },
+  { code: "BPS", city: "Porto Seguro", label: "Porto Seguro (BPS)" },
+  { code: "VDC", city: "Vitória da Conquista", label: "Vitória da Conquista (VDC)" },
+  { code: "PHB", city: "Parnaíba", label: "Parnaíba (PHB)" },
+  { code: "PNZ", city: "Petrolina", label: "Petrolina (PNZ)" },
+  // Norte
+  { code: "BEL", city: "Belém", label: "Belém (BEL)" },
+  { code: "MAO", city: "Manaus", label: "Manaus (MAO)" },
+  { code: "BVB", city: "Boa Vista", label: "Boa Vista (BVB)" },
+  { code: "PVH", city: "Porto Velho", label: "Porto Velho (PVH)" },
+  { code: "RBR", city: "Rio Branco", label: "Rio Branco (RBR)" },
+  { code: "STM", city: "Santarém", label: "Santarém (STM)" },
+  { code: "MCP", city: "Macapá", label: "Macapá (MCP)" },
+  { code: "IMP", city: "Imperatriz", label: "Imperatriz (IMP)" },
+  { code: "OAL", city: "Cacoal", label: "Cacoal (OAL)" },
+].sort((a, b) => a.city.localeCompare(b.city, "pt-BR"));
 
 const AIRLINES = ["LATAM", "GOL", "Azul", "Qualquer"];
 
@@ -317,7 +371,6 @@ export default function App() {
     AIRPORTS.find(a => a.code === "GIG"),
     AIRPORTS.find(a => a.code === "FOR"),
   ]);
-  const [destSelect, setDestSelect] = useState("");
   const [startDate, setStartDate] = useState("2026-08-16");
   const [returnDate, setReturnDate] = useState("2026-08-19");
   const [airline, setAirline] = useState("LATAM");
@@ -333,7 +386,6 @@ export default function App() {
     if (ap && !destinations.find(d => d.code === code) && code !== origin?.code) {
       setDestinations([...destinations, ap]);
     }
-    setDestSelect("");
   }
 
   function removeDestination(code) {
@@ -409,7 +461,7 @@ export default function App() {
           }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           <p style={{ color: C.purpleDark, fontWeight: 600, fontSize: 14 }}>Gerando seu roteiro...</p>
-          <p style={{ color: C.textMuted, fontSize: 12 }}>Otimizando rota e verificando voos</p>
+          <p style={{ color: C.textMuted, fontSize: 12 }}>Otimizando rota e verificando voos · pode levar até 30 segundos</p>
         </div>
       )}
 
@@ -448,9 +500,9 @@ export default function App() {
               ))}
             </div>
             <select
-              value={destSelect}
+              value=""
               onChange={e => { if (e.target.value) addDestination(e.target.value); }}
-              style={{ ...inputStyle, color: destSelect ? C.textMain : C.textMuted }}
+              style={{ ...inputStyle, color: C.textMuted }}
             >
               <option value="">+ Adicionar destino...</option>
               {AIRPORTS
