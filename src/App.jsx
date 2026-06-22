@@ -190,25 +190,34 @@ function SectionHeader({ dateBadge, badgeBg, badgeColor, title, subtitle }) {
 
 // ── Itinerary logic ──────────────────────────────────────────────
 function buildPrompt({ origin, destinations, startDate, returnDate, airline, meetingHours, departureNote }) {
-  return `Responda SOMENTE com JSON puro sem markdown, sem blocos de codigo, sem texto antes ou depois. Apenas o objeto JSON.
+  const destList = destinations.map(d => d.label + " (" + d.code + ")").join(", ");
+
+  return `Você é um especialista em roteiros de viagem corporativa no Brasil com acesso a informações reais de voos.
+
+TAREFA:
+1. Pesquise voos reais disponíveis para as rotas abaixo no período informado usando web search
+2. Baseado nos horários e disponibilidade reais encontrados, monte o roteiro mais otimizado
+3. Priorize: menor tempo total de deslocamento, voos noturnos entre destinos para preservar dias úteis, sem backtracking geográfico
+4. Responda SOMENTE com JSON puro — sem markdown, sem blocos de código, sem texto antes ou depois
 
 DADOS DA VIAGEM:
 - Origem: ${origin.label} (${origin.code})
-- Destinos: ${destinations.map(d => d.label + " (" + d.code + ")").join(", ")}
-- Data inicio: ${startDate} | Data retorno: ${returnDate}
-- Companhia preferida: ${airline} | Horario reunioes: ${meetingHours}
-- Observacoes: ${departureNote || "Preferir voos noturnos entre destinos"}
+- Destinos para reuniões: ${destList}
+- Data início: ${startDate} | Data retorno: ${returnDate}
+- Companhia preferida: ${airline}
+- Horário das reuniões: ${meetingHours}
+- Observações: ${departureNote || "Preferir voos noturnos entre destinos"}
 
-REGRAS:
-1. Otimize rota geografica sem backtracking
-2. Use voos noturnos entre destinos para nao perder dias uteis
-3. Priorize a companhia indicada
-4. Reunioes apenas em dias uteis seg-sex
-5. Use voos reais de LATAM GOL ou Azul
-6. Retorno obrigatoriamente em ${returnDate}
-7. Mantenha notas com no maximo 1 item por dia e resumo com no maximo 4 itens
+REGRAS DE OTIMIZAÇÃO:
+1. Pesquise rotas e horários reais de LATAM, GOL e Azul para o período
+2. Escolha sequência de cidades que minimize backtracking geográfico
+3. Para cada trecho, use o voo real com melhor horário — prefira saídas após 17h (noturnos) para não perder dia útil
+4. Reuniões apenas em dias úteis (seg-sex), das ${meetingHours}
+5. Voo de retorno obrigatoriamente em ${returnDate}
+6. Se não houver voo direto, inclua a melhor conexão disponível com menor escala
+7. Mantenha notas com no máximo 1 item e resumo com no máximo 4 itens
 
-RESPONDA APENAS COM ESTE JSON (sem nenhum texto adicional):
+FORMATO — responda APENAS este JSON:
 {"titulo":"string","subtitulo":"string","dias":[{"data":"YYYY-MM-DD","tipo":"voo_posicionamento ou reuniao_e_voo ou reuniao ou retorno","cidade":"string","badge":"string ex Dom 16 ago","badgeBg":"#hexcolor","badgeColor":"#hexcolor","titulo":"string","subtitulo":"string","reuniao":"string ou null","voos":[{"airline":"string","route":"string ex POA para CWB","time":"string ex 21h00 ate 22h15","duration":"string ex 1h15 direto","fnum":"string ou null","night":true,"aviso":"string ou null"}],"notas":["string"]}],"resumo":["string"]}`;
 }
 
@@ -566,7 +575,7 @@ export default function App() {
 
       const data = await res.json();
 
-      // Mostra erro detalhado da API ou da function
+      // Server or API error
       if (!res.ok || data.error) {
         const msg = data.error || `HTTP ${res.status}`;
         setError(`Erro do servidor: ${msg}`);
@@ -574,7 +583,8 @@ export default function App() {
         return;
       }
 
-      const text = data.content?.map(b => b.text || "").join("") || "";
+      // Use _text shortcut from function, or fallback to content blocks
+      const text = data._text || data.content?.filter(b => b.type === "text").map(b => b.text).join("") || "";
 
       if (!text) {
         setError(`Resposta vazia da API. Stop reason: ${data.stop_reason || "desconhecido"}`);
@@ -587,7 +597,6 @@ export default function App() {
         setItinerary(parsed);
         setStep("result");
       } else {
-        // Mostra os primeiros 300 chars do JSON inválido para debug
         setError(`JSON inválido recebido. Início da resposta: ${text.slice(0, 300)}`);
         setStep("form");
       }
@@ -630,7 +639,7 @@ export default function App() {
           }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           <p style={{ color: C.purpleDark, fontWeight: 600, fontSize: 14 }}>Gerando seu roteiro...</p>
-          <p style={{ color: C.textMuted, fontSize: 12 }}>Otimizando rota e verificando voos · pode levar até 30 segundos</p>
+          <p style={{ color: C.textMuted, fontSize: 12 }}>Pesquisando voos reais e otimizando rota · pode levar até 40 segundos</p>
         </div>
       )}
 
