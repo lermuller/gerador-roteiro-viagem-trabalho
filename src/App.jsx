@@ -408,18 +408,36 @@ export default function App() {
           messages: [{ role: "user", content: prompt }],
         }),
       });
+
       const data = await res.json();
+
+      // Mostra erro detalhado da API ou da function
+      if (!res.ok || data.error) {
+        const msg = data.error || `HTTP ${res.status}`;
+        setError(`Erro do servidor: ${msg}`);
+        setStep("form");
+        return;
+      }
+
       const text = data.content?.map(b => b.text || "").join("") || "";
+
+      if (!text) {
+        setError(`Resposta vazia da API. Stop reason: ${data.stop_reason || "desconhecido"}`);
+        setStep("form");
+        return;
+      }
+
       const parsed = parseItinerary(text);
       if (parsed) {
         setItinerary(parsed);
         setStep("result");
       } else {
-        setError("Não foi possível gerar o roteiro. Tente novamente.");
+        // Mostra os primeiros 300 chars do JSON inválido para debug
+        setError(`JSON inválido recebido. Início da resposta: ${text.slice(0, 300)}`);
         setStep("form");
       }
     } catch (e) {
-      setError("Erro de conexão. Tente novamente.");
+      setError(`Erro de conexão: ${e.message}`);
       setStep("form");
     } finally {
       setLoading(false);
