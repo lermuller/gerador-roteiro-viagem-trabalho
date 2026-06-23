@@ -131,19 +131,25 @@ function Card({ children, highlight }) {
   );
 }
 
-function FlightRow({ airline, route, time, duration, fnum, night }) {
+function FlightRow({ airline, route, time, duration, fnum, night, preco }) {
   return (
     <div style={{
-      display: "flex", alignItems: "center", gap: 8,
+      display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
       padding: "8px 12px", borderRadius: 7,
       background: night ? C.purpleLight : C.grayLight,
       border: `0.5px solid ${night ? C.purpleMid : C.border}`,
       marginBottom: 5,
     }}>
       <Badge text={airline} bg={C.coralLight} color={C.coral} size={10} />
-      <span style={{ flex: 1, fontWeight: 600, fontSize: 13, color: C.textMain }}>{route}</span>
+      <span style={{ flex: 1, minWidth: 90, fontWeight: 600, fontSize: 13, color: C.textMain }}>{route}</span>
       <span style={{ fontSize: 12, color: C.textSec, whiteSpace: "nowrap" }}>{time}</span>
       <span style={{ fontSize: 11, color: C.textMuted, whiteSpace: "nowrap" }}>{duration}</span>
+      {preco && (
+        <span style={{
+          fontSize: 11, fontWeight: 600, color: C.green,
+          background: C.greenLight, borderRadius: 100, padding: "2px 9px", whiteSpace: "nowrap",
+        }}>{preco}</span>
+      )}
     </div>
   );
 }
@@ -216,9 +222,13 @@ REGRAS DE OTIMIZAÇÃO:
 5. Voo de retorno obrigatoriamente em ${returnDate}
 6. Se não houver voo direto, inclua a melhor conexão disponível com menor escala
 7. Mantenha notas com no máximo 1 item e resumo com no máximo 4 itens
+8. Para cada voo, estime uma faixa de preço realista em reais (campo "preco") baseada na rota, antecedência e companhia
+9. Preencha "partida" e "chegada" no formato HH:MM (24h) e "origem"/"destino" com códigos IATA para exportação de calendário
+10. Para dias com reunião, preencha "reuniaoInicio" e "reuniaoFim" no formato HH:MM
+11. Some as faixas de preço dos voos em "precoTotalEstimado"
 
 FORMATO — responda APENAS este JSON:
-{"titulo":"string","subtitulo":"string","dias":[{"data":"YYYY-MM-DD","tipo":"voo_posicionamento ou reuniao_e_voo ou reuniao ou retorno","cidade":"string","badge":"string ex Dom 16 ago","badgeBg":"#hexcolor","badgeColor":"#hexcolor","titulo":"string","subtitulo":"string","reuniao":"string ou null","voos":[{"airline":"string","route":"string ex POA para CWB","time":"string ex 21h00 ate 22h15","duration":"string ex 1h15 direto","fnum":"string ou null","night":true,"aviso":"string ou null"}],"notas":["string"]}],"resumo":["string"]}`;
+{"titulo":"string","subtitulo":"string","dias":[{"data":"YYYY-MM-DD","tipo":"voo_posicionamento ou reuniao_e_voo ou reuniao ou retorno","cidade":"string","badge":"string ex Dom 16 ago","badgeBg":"#hexcolor","badgeColor":"#hexcolor","titulo":"string","subtitulo":"string","reuniao":"string ou null","reuniaoInicio":"HH:MM ou null","reuniaoFim":"HH:MM ou null","voos":[{"airline":"string","route":"string ex POA para CWB","origem":"COD ex POA","destino":"COD ex CWB","time":"string ex 21h00 ate 22h15","partida":"HH:MM ex 21:00","chegada":"HH:MM ex 22:15","duration":"string ex 1h15 direto","fnum":"string ou null","night":true,"aviso":"string ou null","preco":"string ex R$ 450-650 ou null"}],"notas":["string"]}],"resumo":["string"],"precoTotalEstimado":"string ex R$ 1800-2400"}`;
 }
 
 function parseItinerary(json) {
@@ -238,6 +248,86 @@ function parseItinerary(json) {
   }
 }
 
+
+
+// ── ICS Calendar Generator ────────────────────────────────────────
+function generateICS(data) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const toICSDate = (dateStr, timeStr) => {
+    // dateStr: YYYY-MM-DD, timeStr: HH:MM → YYYYMMDDTHHMMSS
+    if (!dateStr) return null;
+    const [y, m, d] = dateStr.split("-");
+    const [hh, mm] = (timeStr || "09:00").split(":");
+    return `${y}${pad(m)}${pad(d)}T${pad(hh)}${pad(mm)}00`;
+  };
+
+  const esc = (s) => String(s || "").replace(/[\\;,]/g, (m) => "\\" + m).replace(/\n/g, "\\n");
+
+  let lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Gerador de Roteiro//PT-BR//",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+  ];
+
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  let uid = 0;
+
+  for (const dia of (data.dias || [])) {
+    // Flights as events
+    for (const v of (dia.voos || [])) {
+      const start = toICSDate(dia.data, v.partida);
+      // crude end: if chegada earlier than partida assume +1 day handled by same date; keep simple
+      let endDate = dia.data;
+      if (v.chegada && v.partida && v.chegada < v.partida) {
+        // overnight — add 1 day
+        const dt = new Date(dia.data + "T00:00:00");
+        dt.setDate(dt.getDate() + 1);
+        endDate = dt.toISOString().slice(0, 10);
+      }
+      const end = toICSDate(endDate, v.chegada || v.partida);
+      if (!start) continue;
+      lines.push(
+        "BEGIN:VEVENT",
+        `UID:flight-${uid++}-${stamp}@roteiro`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${start}`,
+        end ? `DTEND:${end}` : "",
+        `SUMMARY:✈ ${esc(v.airline)} ${esc(v.route)}`,
+        `DESCRIPTION:${esc(`Voo ${v.fnum || ""} · ${v.duration || ""}${v.preco ? " · " + v.preco : ""}`)}`,
+        v.origem ? `LOCATION:${esc(v.origem)}` : "",
+        "END:VEVENT"
+      );
+    }
+    // Meeting as event
+    if (dia.reuniao) {
+      const start = toICSDate(dia.data, dia.reuniaoInicio || "09:00");
+      const end = toICSDate(dia.data, dia.reuniaoFim || "17:00");
+      lines.push(
+        "BEGIN:VEVENT",
+        `UID:meeting-${uid++}-${stamp}@roteiro`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${start}`,
+        `DTEND:${end}`,
+        `SUMMARY:🤝 ${esc(dia.reuniao)}`,
+        `LOCATION:${esc(dia.cidade || "")}`,
+        "END:VEVENT"
+      );
+    }
+  }
+
+  lines.push("END:VCALENDAR");
+  const blob = new Blob([lines.filter(Boolean).join("\r\n")], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = (data.titulo || "roteiro").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".ics";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // ── PDF Generator ─────────────────────────────────────────────────
 async function generatePDF(data) {
@@ -353,8 +443,9 @@ async function generatePDF(data) {
       rr(MX + 5, cy + 1.5, 14, 5, 1, colors.coralL);
       text(v.airline || "", MX + 6, cy + 5.5, { size: 6, bold: true, color: colors.coral });
       text(v.route || "", MX + 22, cy + 5.5, { size: 8, bold: true, color: colors.textMain });
-      text(v.time || "", MX + 95, cy + 5.5, { size: 7.5, color: colors.textSec });
-      text(v.duration || "", MX + 135, cy + 5.5, { size: 7, color: colors.textMuted });
+      text(v.time || "", MX + 88, cy + 5.5, { size: 7.5, color: colors.textSec });
+      text(v.duration || "", MX + 122, cy + 5.5, { size: 7, color: colors.textMuted });
+      if (v.preco) text(v.preco, MX + 152, cy + 5.5, { size: 7, bold: true, color: colors.green });
       cy += 10;
     }
 
@@ -383,6 +474,15 @@ async function generatePDF(data) {
     text(item, sx + 7, sy + 3, { size: 7.5, color: colors.textSec, maxWidth: CW / 2 - 10 });
   });
   y += Math.ceil((data.resumo?.length || 0) / 2) * 6 + 5;
+
+  // Total price
+  if (data.precoTotalEstimado) {
+    checkPage(12);
+    rr(MX, y, CW, 9, 2, colors.greenL, [151, 196, 89]);
+    text("Custo estimado dos voos", MX + 4, y + 5.5, { size: 8, bold: true, color: colors.green });
+    text(data.precoTotalEstimado, W - MX - 4 - doc.getTextWidth(data.precoTotalEstimado), y + 5.5, { size: 9, bold: true, color: colors.green });
+    y += 13;
+  }
 
   // Footer
   checkPage(10);
@@ -471,22 +571,45 @@ function ItineraryView({ data, onReset }) {
         </div>
       </Card>
 
+      {data.precoTotalEstimado && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: C.greenLight, border: `0.5px solid ${C.greenMid}`,
+          borderRadius: 10, padding: "12px 16px", marginTop: 4,
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.green }}>Custo estimado dos voos</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: C.green }}>{data.precoTotalEstimado}</span>
+        </div>
+      )}
+
       <p style={{ fontSize: 10, color: C.textMuted, textAlign: "center", marginTop: 8 }}>
-        Horários sujeitos a confirmação · Verifique disponibilidade em latam.com antes de comprar
+        Horários e preços são estimativas · Confirme disponibilidade antes de comprar
       </p>
 
-      <button
-        onClick={handleDownloadPDF}
-        disabled={pdfLoading}
-        style={{
-          width: "100%", padding: "12px", borderRadius: 8, marginTop: 8,
-          background: pdfLoading ? C.grayMid : C.purpleDark,
-          border: "none", color: C.white, borderRadius: 100,
-          fontSize: 13, fontWeight: 700, cursor: pdfLoading ? "not-allowed" : "pointer",
-        }}
-      >
-        {pdfLoading ? "Gerando PDF..." : "⬇ Baixar PDF"}
-      </button>
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <button
+          onClick={handleDownloadPDF}
+          disabled={pdfLoading}
+          style={{
+            flex: 1, padding: "12px", borderRadius: 100,
+            background: pdfLoading ? C.grayMid : C.purpleDark,
+            border: "none", color: C.white,
+            fontSize: 13, fontWeight: 700, cursor: pdfLoading ? "not-allowed" : "pointer",
+          }}
+        >
+          {pdfLoading ? "Gerando..." : "⬇ PDF"}
+        </button>
+        <button
+          onClick={() => { try { generateICS(data); } catch(e) { alert("Erro ao gerar calendário: " + e.message); } }}
+          style={{
+            flex: 1, padding: "12px", borderRadius: 100,
+            background: C.white, border: `1.5px solid ${C.purpleDark}`,
+            color: C.purpleDark, fontSize: 13, fontWeight: 700, cursor: "pointer",
+          }}
+        >
+          📅 Calendário
+        </button>
+      </div>
 
       <button onClick={onReset} style={{
         width: "100%", padding: "10px", borderRadius: 8, marginTop: 8,
